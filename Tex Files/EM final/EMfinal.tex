@@ -1,0 +1,67 @@
+\documentclass[14pt, a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[dvipsnames, svgnames, x11names]{xcolor}
+\usepackage{amsmath,amsthm,amssymb}
+
+%TikZ環境
+\usepackage{tikz}
+	\tikzset{dot/.style={circle,fill,inner sep=6*\pgflinewidth/2}}
+\usepackage{tikz-cd}
+\usepackage{tikz-dimline}
+\usepackage{tkz-euclide}
+\usepackage{tikz-3dplot}
+\usepackage{pgfplots}
+
+%其他有的沒有的環境
+\usepackage{listings}
+  \lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    frame=single,
+    showstringspaces=false
+  }
+\usepackage{enumitem}
+\usepackage{makebox}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{titletoc}
+\usepackage{booktabs}
+\usepackage[export]{adjustbox}
+\usepackage[labelformat=empty]{caption}
+
+%中文環境
+\usepackage{xeCJK}
+    \setCJKmainfont{GenRyuMin TW}
+    \newCJKfontfamily\boldGenRyuMin{GenRyuMin TW B}
+    \newCJKfontfamily\highLightFont{GenSenRounded TW}
+
+\newcommand{\lp}{\makebox[10pt][r]{（}}
+\newcommand{\rp}{\makebox[10pt][l]{）}}
+
+\makeatletter
+\newcommand{\leqnomode}{\tagsleft@true}
+\newcommand{\reqnomode}{\tagsleft@false}
+\renewcommand{\sectionmark}[1]{\markright{\normalfont\thesection\quad #1}}
+\renewcommand{\subsectionmark}[1]{\markright{\normalfont\thesubsection\quad #1}}
+\makeatother
+
+\title{工程數學期末報告}
+\author{第六組：羅弘育、吳正淳、張鄭心美、林柏村、林睿楚、陳品翔}
+\date{2022/6/8}
+
+\begin{document}
+	\maketitle
+	
+	\leqnomode
+	\renewcommand{\contentsname}{目錄}
+    \vspace*{\fill}
+	\input{1 Abstract}
+    \vspace*{\fill}
+    \tableofcontents
+    \newpage
+
+    \input{2 From Series to Integral}
+    \input{3 DFT}
+    \input{4 Image Processing}
+    \input{5 result}
+\end{document} 

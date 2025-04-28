@@ -1,0 +1,8 @@
+- `Tex Files/`
+  - 包含書面報告所使用的 tex 檔案與圖片
+  - 本報告的 tex 檔均以 XeLaTeX 編譯
+
+- `Programs/`
+  - 包含報告中所使用到的完整程式碼
+  - EdgeDetection 以 Python 撰寫
+  - DrawingWithEpicycles 以 Java 撰寫

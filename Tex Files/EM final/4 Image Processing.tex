@@ -1,0 +1,347 @@
+\section{圖片的重現}
+  \subsection{如何重現一張圖片}
+  先前提到，複數域上的傅立葉轉換常用於資料壓縮，而本次報告便是以影像壓縮作為應用上的實例。
+  \\\\
+  要將影像壓縮並重現，我們需要進行以下的四個步驟：
+  \begin{enumerate}
+    \item[(1)]
+    將圖片轉為函數：將每個像素所提供的資訊轉為一個或多個函數；
+
+    \item[(2)]
+    DFT：將函數取樣並得出各個係數\,\(X_k\)；
+
+    \item[(3)]
+    IDFT：將係數逆轉換回代表函數的\,\(x_n\)；
+
+    \item[(4)]
+    輸出圖片：將函數轉換回圖片。
+  \end{enumerate}
+
+  \subsection{圖片與函數}
+  要將圖片轉換為函數，我們需要先回答一個最基本的問題：何謂函數？根據維基百科，一個由集合\,\(X\)\,連結到集合\,\(Y\)\,的函數會將\,X\,內的所有元素都各連結到恰好一個 \,\(Y\)\,內的元素。這裡的\makebox[4pt][c]{}「\makebox[1pt][c]{}恰好一個\makebox[1pt][c]{}」\makebox[4pt][c]{}很重要：這代表了我們不能光靠照片內\,\(x\)\,與\,\(y\)\,的關係決定一個函數，因為很顯然地，一張照片的同一行或是同一列都會存在不只一個像素。以下圖為例：
+  \begin{center}
+    \begin{tikzpicture}
+      \path[fill=cyan](0, 0) rectangle (1, 1);
+      \path[fill=cyan](1, 1) rectangle (2, 2);
+      \path[fill=cyan](1, 2) rectangle (2, 3);
+      \path[fill=cyan](2, 2) rectangle (3, 3);
+      \path[fill=cyan](0, 2) rectangle (1, 3);
+      \draw[-, dashed](3, 3)--(3, 0)--(0, 0)--(0, 3)--(3, 3);
+      \draw[-, dashed](0, 1)--(1, 1)--(2, 1)--(3, 1);
+      \draw[-, dashed](0, 2)--(1, 2)--(2, 2)--(3, 2);
+      \draw[-, dashed](1, 0)--(1, 1)--(1, 2)--(1, 3);
+      \draw[-, dashed](2, 0)--(2, 1)--(2, 2)--(2, 3);
+    \end{tikzpicture}
+  \end{center}
+  \noindent 此圖代表了含有九個像素的圖片，且只有藍色的像素屬於這張照片想要表達的資訊，白色像素則是單純代表一片空白。因此能代表上圖的有效\,\(x\)\,值為\,\(0\)、\(0\)、\(1\)、\(1\)、\(2\)，而有效的\,\(y\)\,則為\,\(0\)、\(0\)、\(0\)、\(1\)、\(2\)。故我們會傾向將\,\(x\)、\(y\)\,分別定義為兩個不同的函數，並在最後轉換回圖片時作進一步的整合。
+  \\\\
+  自變數的定義有多種方式，而利用索引值是一種相對較佳的方法：越靠近圖片左上角的像素索引值越小，而越靠近圖片右下角者則反之。而因為同一個像素點會對應到一組\,\(x\)、\(y\)\,值，故同一個索引值所對應的\,\(x\)、\(y\)\,值必定會對應到同一個像素點。以上圖為例，我們便會定義
+  \[x(0)=0,\quad x(1)=1,\quad x(2)=2,\quad x(3)=1,\quad x(4)=0\]
+  與
+  \[y(0)=0,\quad y(1)=0,\quad y(2)=0,\quad y(3)=1,\quad y(4)=2\]
+  \\
+  到這裡我們已經知道：一張圖片其實就是由表示\,\(x\)、\(y\)\,值的數組\,\([x(i), y(i)]\)\,表示。但是現在又有兩個新的問題產生：第一個是該如何決定哪些像素能夠代表該圖片，第二個則是該如何排序這些索引值。第二個問題其實不難，我們只需要依照點與點之間的距離排序即可：距離愈近的兩個點，其索引值也應該愈相近。而第一個問題的答案會由下一小節得到解答。
+
+  \subsection{邊緣偵測}
+  我們首先思考一個問題：一張圖片的哪樣特徵最能彰顯圖片的形狀？這個問題不難，只要知道圖片中各個物件的輪廓，我們就能清楚辨識這張圖片所要表達的內容
+  ，而真正困難的部分是該如何獲取這些輪廓。幸運的是，現在是\,2022\,年，而很多前輩早在\,1980\,年代便想出了許多邊緣偵測的演算法，也有人已經基於這些演算法，撰寫一系列的函式庫了，因此我們只需要知道它們運作的原理，並加以善用即可。
+  \\\\
+  首先我們需要釐清何謂邊緣。觀察以下的圖形：
+  \begin{center}
+    \begin{tikzpicture}
+      \draw[-, line width=13pt](-1.2, -1.2)--(0, 0);
+    \end{tikzpicture}
+  \end{center}
+  我們很輕易地就能辨認出上圖為一條粗黑線，或是一個黑色的長方形，但為何我們沒有將其視為一個圓形或是其它形狀？這是因為我們看到了兩組具有強烈顏色梯度變化的平行邊緣。換句話說，我們看到了下圖中所標示的紅線處，有極為強烈的顏色差異，促使我們的大腦辨認出其形狀：
+  \begin{center}
+    \begin{tikzpicture}
+      \draw[-, line width=13pt](-1.2, -1.2)--(0, 0);
+      \draw[-, thick, red](0.24/1.414, -0.24/1.414)--(-0.24/1.414, 0.24/1.414)--(-0.24/1.414-1.7/1.414, 0.24/1.414-1.7/1.414)--(0.24/1.414-1.7/1.414, -0.24/1.414-1.7/1.414)--(0.24/1.414, -0.24/1.414)--(-0.24/1.414, 0.24/1.414);
+    \end{tikzpicture}
+  \end{center}
+  \noindent 而利用\,Canny，一個由\,John F. Canny\,於\,1986\,年發表的演算法，電腦也能學習到這件事：
+  \begin{enumerate}
+    \item[(1)]
+    將圖片透過高斯模糊降噪；
+
+    \item[(2)]
+    計算圖片中的強度梯度；
+
+    \item[(3)]
+    以兩個自訂的門檻值決定邊緣。
+  \end{enumerate}
+  \noindent \\
+  本次報告以\,Python\,版本的\,OpenCV\,實作，並以臺大校徽為實驗對象。OpenCV\,包含了臉部、動作的偵測，動態捕捉等技術支援，並具有豐富的機器學習程式庫，而\,Canny\,亦是其中之一：
+  \begin{lstlisting}[language=Python]
+  import cv2
+
+  img = cv2.imread('NTU.png')
+  img = cv2.resize(img, (0, 0), fx=0.5, fy=0.5)
+  cv2.imshow('Original Image', img)
+
+  img_blurred = cv2.GaussianBlur(img, (5, 5), 5)
+  cv2.imshow('Blurred Image', img_blurred)
+
+  img_stdized = img / 255
+  noise = np.random.normal(0, 0.2, img_stdized.shape)
+  img_noised = img_stdized + noise
+  cv2.imshow('Noise Added', img_noised)
+
+  img_noised_and_blurred = cv2.GaussianBlur(img_noised, (5, 5), 5)
+  cv2.imshow('Noised and Blurred Image', img_noised_and_blurred)
+
+  img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+  img = cv2.Canny(img, 70, 210)
+  cv2.imshow('After Edge Detection', img)
+
+  cv2.waitKey(0)
+  \end{lstlisting}
+  \noindent 圖像處理後的結果如下所示：
+  \noindent \\
+  \begin{figure}[h!]
+  \centering
+    \begin{minipage}{0.25\linewidth}
+      \centering
+      \includegraphics[width=120pt]{NTU original.jpg}
+      \caption*{\textbf{圖\,1}\(\quad\)原圖}
+    \end{minipage}
+  \end{figure}
+  \newpage
+  \begin{figure}[t!]
+  \centering
+    \begin{minipage}{0.3\linewidth}
+      \centering
+      \includegraphics[width=120pt]{NTU noise.jpg}
+      \caption*{\textbf{圖\,2}\(\quad\)加入噪點後的圖\,1}
+    \end{minipage}
+    \quad
+    \begin{minipage}{0.3\linewidth}
+      \centering
+      \includegraphics[width=120pt]{NTU blur.jpg}
+      \caption*{\textbf{圖\,3}\(\quad\)高斯模糊後的圖\,2}
+    \end{minipage}
+    \quad
+    \begin{minipage}{0.3\linewidth}
+      \centering
+      \includegraphics[width=120pt]{NTU edge.jpg}
+      \caption*{\textbf{圖\,4}\(\quad\)Canny\,後的圖\,1}
+    \end{minipage}
+  \end{figure}
+  \noindent 接著將邊緣偵測後的圖片輸出為\,csv\,檔。因為邊緣為白色，我們只需要紀錄灰階值高於\,\(250\)\,的像素：
+  \begin{lstlisting}[language=Python]
+  import csv
+
+  csvPath = 'customizedPath/edge coordinates.csv'
+  with open(csvPath, 'w', newline='') as file:
+      writer = csv.writer(file)
+      for row in range(img.shape[0]):
+          for col in range(img.shape[1]):
+              if img[row][col] > 250:
+                  writer.writerow([col, row])
+  \end{lstlisting}
+  程式執行後，我們便會得到一個僅包含邊緣座標值的\,csv\,檔：
+  \begin{center}
+    \includegraphics[width=70pt]{detected edge csv.jpg}
+  \end{center}
+
+  \subsection{DFT\,的實作}
+  有了所有的邊緣座標值，我們便能將其\,\(x\)、\(y\)\,值分別作為兩個函數進行\,DFT：首先以\,Java\,讀取先前於\,Python\,程式匯出的\,csv\,檔：
+  \begin{lstlisting}[language=Java]
+  String pathOfCSVFile = "customizedPath/edge coordinates.csv";
+  Image image = new Image(new Scanner(new File(pathOfCSVFile)).useDelimiter(","));
+  \end{lstlisting}
+  \noindent 物件\,\texttt{Image}\,的建構子\,(Constructor)\,如下：
+  \begin{lstlisting}[language=Java]
+  private ArrayList<Point> points = new ArrayList<>();
+      public Image(Scanner s) {
+          while (s.hasNextLine()) {
+              String[] temp = s.nextLine().split(",");
+              points.add(new Point(Double.parseDouble(temp[0]), Double.parseDouble(temp[1])));
+          }
+      points = Point.sortPointsByDistance(points);
+  }
+  \end{lstlisting}
+  \noindent 而\,\texttt{Point}\,的定義如下：
+  \begin{lstlisting}[language=Java]
+  public record Point(double x, double y) {
+      public static ArrayList<Point> sortPointsByDistance(ArrayList<Point> points) {
+          var res = new ArrayList<Point>();
+          Point cur = points.remove(0);
+          res.add(cur);
+
+          while (!points.isEmpty()) {
+              double minDistance = Double.MAX_VALUE;
+              int trgIdx = 0;
+
+              for (int i = 0; i < points.size(); ++i) {
+                  double curDistance = findDistance(cur, points.get(i));
+
+                  if (curDistance < minDistance) {
+                      minDistance = curDistance;
+                      trgIdx = i;
+                  }
+              }
+              cur = points.remove(trgIdx);
+              res.add(cur);
+          }
+          return res;
+      }
+
+      public static double findDistance(Point p1, Point p2) {
+          return Math.sqrt(Math.pow(p1.x() - p2.x(), 2) + Math.pow(p1.y() - p2.y(), 2));
+      }
+  }
+  \end{lstlisting}
+  \noindent 使用者接著可以選擇欲採用的點數量：若要選擇全部，
+  \begin{lstlisting}[language=Java]
+  Double[] imageXCoords = image.getAllX();
+  Double[] imageYCoords = image.getAllY();
+  \end{lstlisting}
+  \noindent 而若只要選擇部分的點做\,DFT，則需要改用
+  \begin{lstlisting}[language=Java]
+  Double[] imageXCoords = image.getSamplesX(proportion);
+  Double[] imageYCoords = image.getSamplesY(proportion);
+  \end{lstlisting}
+  \noindent 其中\,\texttt{proportion}\,為一介於\,\(0\)\,到\,\(1\)\,的數，而程式會任意選擇
+  \[\text{proportion}\times\text{點的總數}\]
+  個點作為\,\texttt{imageXCoords}\,與\,\texttt{imageYCoords}\,的來源。
+  \\\\
+  接下來便是\,DFT\,的實作。
+  \begin{lstlisting}[language=Java]
+  public final class DiscreteFourierTransform {
+      public static ArrayList<Coefficient> transform(Double[] func) {
+          var coeff = new ArrayList<Coefficient>();
+          int N = func.length;
+          double re, im, ampl, freq, phase;
+
+          for (int k = 0; k < N; ++k) {
+              re = 0;
+              im = 0;
+
+              for (int n = 0; n < N; ++n) {
+                  double angle = 2 * Math.PI * k * n / N;
+                  re += func[n] * Math.cos(angle);
+                  im -= func[n] * Math.sin(angle);
+              }
+
+              re /= N;
+              im /= N;
+              ampl = Math.sqrt(re * re + im * im);
+              freq = k;
+              phase = Math.atan2(im, re);
+
+              coeff.add(new Coefficient(ampl, freq, phase));
+          }
+
+          return coeff;
+      }
+  }
+  \end{lstlisting}
+  \noindent 這裡為了防止溢位\,(Overflow)\,發生，我們提早於\,\(X_k\)\,的計算中對結果除以\,\(N\)，並一併計算\,IDFT\,所需要的半徑\,\texttt{ampl}、頻率\,\texttt{freq}\,以及相位角\,\texttt{phase}。
+  
+  \subsection{IDFT\,的實作}
+  有了各個係數\,\(X_k\)\,的值，我們接著便能透過\,IDFT\,回推函數中的各個\,\(x_n\)\,值。在前一節的最後一段程式碼，我們已經將畫圓所需要的參數儲存至一個\,\texttt{ArrayList}\,內，故現在只需要將這些圓依照疊代的順序畫出，並將任何一個本輪的圓心設為前一個圓的運動質點。
+  \\\\
+  而對一實數函數而言，其分別經過\,DFT\,與\,IDFT\,的轉換結果仍然為一實數函數，故最後一個本輪的運動質點也必然會恆落於實數軸上。又因為\,\(x\)\,與\,\(y\)\,值在複數平面上為兩線性獨立\,(Linearly independent)\,之變數，我們可以將代表\,\(y\)\,座標的所有本輪相位角均增加\,\(\pi/2\)，這會使得代表\,\(y\)\,座標的實數軸被旋轉\,\(90^\circ\)。如此一來，只要我們將代表\,\(y\)\,座標的首個本輪圓心設定為代表\,\(x\)\,座標的末個本輪運動質點，圖片的任一像素點便能回到實數域上的\,\(xy\)\,平面並重現。
+  \\\\
+  上述概念在本次實作中包裝於一繼承了\,\texttt{JPanel}\,類別的子類別\,\texttt{EpicyclesDrawing}。\texttt{JPanel}\,類別通常會與\,\texttt{JFrame}\,類別搭配使用，前者如同畫布，使用者可以在其上繪製圖形、添加標籤或按鈕等，而後者則相當於一個畫框，負責存放並展示前者的執行結果：
+  \begin{lstlisting}[language=Java]
+  @Override
+  public void paintComponent(Graphics g) {
+      super.paintComponent(g);
+      var g2 = (Graphics2D) g;
+
+      double x = frameWidth / 2.0, y = frameHeight / 2.0;
+      double x_prev, y_prev, ampl, freq, phase;
+
+      for (int i = 1; i < coeffsX.size(); ++i) {
+          x_prev = x;
+          y_prev = y;
+          ampl = coeffsX.get(i).ampl();
+          freq = coeffsX.get(i).freq();
+          phase = coeffsX.get(i).phase();
+          
+          x += ampl * Math.cos(freq * time + phase);
+          y += ampl * Math.sin(freq * time + phase);
+          
+          if (circlesVisible) {
+              g2.drawOval((int) (x_prev - ampl), (int) (y_prev - ampl),
+                          (int) (2 * ampl),      (int) (2 * ampl));
+              g2.drawLine((int) x_prev, (int) y_prev,
+                          (int) x,      (int) y);
+          }
+      }
+      
+      for (int i = 1; i < coeffsY.size(); ++i) {
+          x_prev = x;
+          y_prev = y;
+          ampl = coeffsY.get(i).ampl();
+          freq = coeffsY.get(i).freq();
+          phase = coeffsY.get(i).phase();
+           
+          x += ampl * Math.cos(freq * time + phase + Math.PI / 2);
+          y += ampl * Math.sin(freq * time + phase + Math.PI / 2);
+          
+          if (circlesVisible) {
+              g2.drawOval((int) (x_prev - ampl), (int) (y_prev - ampl),
+                          (int) (2 * ampl),      (int) (2 * ampl));
+              g2.drawLine((int) x_prev, (int) y_prev,
+                          (int) x,      (int) y);
+          }
+      }
+  }
+  \end{lstlisting}
+  \noindent \\
+  很顯然地，上述的程式碼只會計算出一個像素點的座標，而要將整張圖片重現，我們必須更改變數\,\texttt{time}\,的值。此處的\,\texttt{time}\,相當於我們在\,3.2\,所提到的索引值，座標值愈相近的兩個像素點，被畫出來的時間差會愈小。而\,\texttt{time}\,的遞嬗則由\,\texttt{EpicyclesDrawing}\,中、建構子內的\,\texttt{timer}\,實現：
+  \begin{lstlisting}[language=Java]
+  dt = 2 * Math.PI / imageXCoords.length;
+  int delay = 3000 / imageXCoords.length;
+  
+  Timer timer = new Timer(delay, e -> {
+      time += dt;
+      if (time >= 2 * Math.PI) {
+          time = 0;
+      }
+      repaint();
+  });
+  
+  timer.start();
+  \end{lstlisting}
+  \noindent 此處的\,\texttt{repaint()}\,函數會再次呼叫先前提到的\,\texttt{paintComponent()}\,函數。
+  \\\\
+  我們會將所有計算出的像素點座標儲存至一個名為\,\texttt{pointsInGraph}\,的\,\texttt{LinkedList}，而為了避免重複紀錄，我們可以在\,\texttt{paintComponent()}\,中加入以下程式碼：
+  \begin{lstlisting}[language=Java]
+  if (pointsInGraph.size() > coeffsX.size() * appearSize) {
+      pointsInGraph.remove();
+  }
+  pointsInGraph.add(new Point(x, y));
+  \end{lstlisting}
+  \noindent 其中\,\texttt{appearSize}\,為一介於\,0\,到\,1\,的變數，其使得螢幕上至多只會出現
+  \[\text{appearSize}\times\text{使用的點總數}\]
+  個像素點。
+  \\\\
+  又因為\,IDFT\,的圖片重現會是一筆畫地完成，故畫面中會存在多餘的線條。要只留下具有意義的線段，我們可以於\,\texttt{paintComponent()}\,再添加以下程式碼：
+  \begin{lstlisting}[language=Java]
+  if (linesVisible) {
+      g2.setColor(Color.red);
+      for (int i = 0; i < pointsInGraph.size() - 1; ++i) {
+          if (Point.findDistance(pointsInGraph.get(i), pointsInGraph.get(i + 1)) < dist) {
+              g2.drawLine((int) pointsInGraph.get(i).x(),
+                          (int) pointsInGraph.get(i).y(),
+                          (int) pointsInGraph.get(i + 1).x(),
+                          (int) pointsInGraph.get(i + 1).y());
+          }
+      }
+      g2.setColor(Color.black);
+  }
+  \end{lstlisting}
+  \noindent 其中\,\texttt{dist}\,決定了最大的有效像素間距。
+  \\\\
+  程式的執行結果如下：
+  \begin{figure}[h!]
+    \centering
+    \includegraphics[width=300pt]{NTU drawing.jpg}
+  \end{figure}
+  \noindent \\
+  圖中的黑色圓圈即為各個由\,DFT\,與\,IDFT\,構築而成的本輪，其中一部份的圓圈負責\,\(x\)\,軸分量的繪製，而另一部份則負責\,\(y\)\,軸分量的繪製。另外，畫面上方的兩個按鈕\,Hide/Display Epicycles\,與\,Hide/Display Lines\,分別決定了上述程式碼當中的布林變數\,\texttt{circlesVisible}、\texttt{linesVisible}\,之值。若暫時將這兩個變數都設定為\,\texttt{false}，程式就不必處理圖像顯示的部分，其執行的速度也便會提高。
+  
